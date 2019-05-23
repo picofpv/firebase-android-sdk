@@ -16,10 +16,15 @@ package com.google.firebase.storage;
 
 import android.annotation.TargetApi;
 import android.net.Uri;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+
+import com.google.android.gms.common.internal.Preconditions;
+import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.TaskCompletionSource;
+
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -220,5 +225,84 @@ public class TestCommandHelper {
               .append(se.getCause() != null ? se.getCause().toString() : "no cause");
         });
     return result.continueWith(task -> builder);
+  }
+
+  public static Task<StringBuilder> listFiles(int pageSize, int pageCount) {
+
+    final StorageReference reference = FirebaseStorage.getInstance().getReference("smallDirectory");
+
+    TaskCompletionSource<StringBuilder> result = new TaskCompletionSource<>();
+    StringBuilder builder = new StringBuilder();
+    builder.append("Listing Items.\n");
+
+    int[] pagesReceived = new int[] {0};
+
+    Task<ListResult> listFiles = reference.list(pageSize);
+
+    listFiles.addOnCompleteListener(executor, new OnCompleteListener<ListResult>() {
+        @Override
+        public void onComplete(@NonNull Task<ListResult> task) {
+            ++pagesReceived[0];
+
+            ListResult listResult = task.getResult();
+
+            builder.append("list:");
+            builder.append("\nonComplete:Success=\n").append(task.isSuccessful());
+
+            if (task.isSuccessful()) {
+                builder.append("\nReceived Prefixes:\n");
+                for (StorageReference prefix : listResult.getPrefixes()) {
+                    builder.append(prefix.getPath()).append("\n");
+                }
+                builder.append("Received Items:\n");
+                for (StorageReference item : listResult.getItems()) {
+                    builder.append(item.getPath()).append("\n");
+                }
+                builder.append("Page Token:\n").append(listResult.getPageToken());
+            }
+
+            if (pagesReceived[0] == pageCount) {
+                result.setResult(builder);
+            } else {
+                reference.list(pageSize, listResult.getPageToken()).addOnCompleteListener(this);
+            }
+        }
+    });
+    return result.getTask();
+  }
+
+  public static Task<StringBuilder> listAllFiles() {
+
+    final StorageReference reference = FirebaseStorage.getInstance().getReference("largeDirectory");
+
+    TaskCompletionSource<StringBuilder> result = new TaskCompletionSource<>();
+    StringBuilder builder = new StringBuilder();
+    builder.append("Listing All Items.\n");
+
+    Task<ListResult> listFiles = reference.listAll();
+
+    listFiles.addOnCompleteListener(
+        executor,
+        task -> {
+          ListResult listResult = task.getResult();
+
+          builder.append("listAll:");
+          builder.append("\nonComplete:Success=\n").append(task.isSuccessful());
+
+          if (task.isSuccessful()) {
+            builder.append("\nReceived Prefixes:\n");
+            for (StorageReference prefix : listResult.getPrefixes()) {
+                builder.append(prefix.getPath()).append("\n");
+            }
+            builder.append("Received Items:\n");
+            for (StorageReference item : listResult.getItems()) {
+                builder.append(item.getPath()).append("\n");
+            }
+            Preconditions.checkState(listResult.getPageToken() == null);
+          }
+
+          result.setResult(builder);
+        });
+    return result.getTask();
   }
 }
